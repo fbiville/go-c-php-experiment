@@ -1,0 +1,21 @@
+{
+    "name": "fbiville/go-c-php-experiment",
+    "description": "PHP example based on the Cexperimental C library generated from the Neo4j Go Driver",
+    "type": "project",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Florent Biville",
+            "email": "florent.biville@neo4j.com"
+        }
+    ],
+    "platform": {
+        "php": "7.4"
+    },
+    "require": {
+        "ext-ffi": "*"
+    },
+    "scripts": {
+        "main": "php index.php"
+    }
+}
