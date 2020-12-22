@@ -2,32 +2,68 @@
 
 use FFI\CData;
 
-$ffi = FFI::load(__DIR__ . "/libneo4j.h");
-$driverConfig = driverConfig($ffi, "bolt://localhost");
-$driverHandle = neo4jHandle($ffi);
-$driverHandle->cdata = 0;
-$error = ampersand(neo4jError($ffi));
 
-try {
-    $result = $ffi->neo4j_driver_create(
-        ampersand($driverConfig),
-        ampersand($driverHandle),
-        ampersand($error)
-    );
-    if (!$result) {
-        $ffi->neo4j_err_free(ampersand($error));
-        die('could not create driver');
+main();
+
+function main() {
+    $ffi = FFI::load(__DIR__ . "/libneo4j.h");
+    $driverConfig = driverConfig($ffi, "bolt://localhost");
+    $driverHandle = neo4jHandle($ffi);
+    $driverHandle->cdata = 0;
+    $error = ampersand(neo4jError($ffi));
+
+    try {
+        $result = $ffi->neo4j_driver_create(
+            ampersand($driverConfig),
+            ampersand($driverHandle),
+            ampersand($error)
+        );
+        if (!$result) {
+            $ffi->neo4j_err_free(ampersand($error));
+            die('could not create driver');
+        }
+
+        $results = runTransaction(
+            $ffi,
+            $driverHandle,
+            'RETURN $param1 AS x',
+            new QueryParam("param1", 42));
+
+        if ($results === null) {
+            die('could not run transaction');
+        }
+        echo 'Printing results: ';
+        var_dump($results);
+
+    } finally {
+        $ffi->neo4j_driver_destroy($driverHandle->cdata);
     }
-
-    if (!runTransaction($ffi, $driverHandle)) {
-        die('could not run transaction');
-    }
-
-} finally {
-    $ffi->neo4j_driver_destroy($driverHandle);
 }
 
-function runTransaction(FFI $ffi, CData $driverHandle): bool
+class QueryParam {
+    private $name;
+    private $value;
+
+    public function __construct($name, $value)
+    {
+        $this->name = $name;
+        $this->value = $value;
+    }
+
+    public function getName()
+    {
+        return $this->name;
+    }
+
+    public function getValue()
+    {
+        return $this->value;
+    }
+
+
+}
+
+function runTransaction(FFI $ffi, CData $driverHandle, string $cypher, QueryParam ...$params): ?array
 {
     $transactionConfig = neo4jTransactionConfig($ffi);
     $error = ampersand(neo4jError($ffi));
@@ -35,7 +71,7 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
     $transactionHandle->cdata = 0;
 
     $result = $ffi->neo4j_driver_tx(
-        $driverHandle,
+        $driverHandle->cdata,
         ampersand($transactionConfig),
         ampersand($transactionHandle),
         null,
@@ -43,19 +79,23 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
     );
     if (!$result) {
         $ffi->neo4j_err_free(ampersand($error));
-        return false;
+        return null;
     }
 
     $streamHandle = neo4jHandle($ffi);
-    $parameters = $ffi->new("neo4j_param[1]");
-    $parameters[0] = neo4jQueryParam($ffi, "param1", 42);
+    // TODO: handle 0 param case
+    $paramCount = count($params);
+    $parameters = $ffi->new("neo4j_param[". $paramCount ."]");
+    foreach ($params as $i => $param) {
+        $parameters[$i] = neo4jQueryParam($ffi, $param->getName(), $param->getValue());
+    }
     $parameterCount = $ffi->new("int");
-    $parameterCount->cdata = count($parameters);
+    $parameterCount->cdata = $paramCount;
     
     $result = $ffi->neo4j_tx_stream(
         $transactionHandle->cdata,
-        cString($ffi, 'RETURN $param1 AS x'),
-        $parameterCount,
+        cString($ffi, $cypher),
+        $parameterCount->cdata,
         $parameters,
         ampersand($streamHandle),
         ampersand($error)
@@ -63,37 +103,31 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
     if (!$result) {
         $ffi->neo4j_err_free(ampersand($error));
         $ffi->neo4j_tx_rollback($transactionHandle, null);
-        return false;
+        return null;
     }
 
+    $results = array();
     $value = neo4jValue($ffi);
     while ($ffi->neo4j_stream_next($streamHandle->cdata, ampersand($error))) {
         $index = $ffi->new("int");
         $index->cdata = 0;
         $result = $ffi->neo4j_stream_value(
             $streamHandle->cdata,
-            $index,
+            $index->cdata,
             ampersand($value),
             ampersand($error)
         );
         if (!$result) {
             break;
         }
-
-        var_dump($value);
+        array_push($results, $value->val);
     }
 
     $ffi->neo4j_value_free(ampersand($value));
-    var_dump(ampersand($error));
-    return true;
+    return $results;
 }
 
-/**
- * @param FFI $ffi
- * @param $name
- * @param $value
- * @return CData
- */
+
 function neo4jQueryParam(FFI $ffi, string $name, int $value): CData
 {
     $param = $ffi->new("neo4j_param");
