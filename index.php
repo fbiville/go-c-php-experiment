@@ -3,7 +3,7 @@
 use FFI\CData;
 
 $ffi = FFI::load(__DIR__ . "/libneo4j.h");
-$driverConfig = driverConfig($ffi, "neo4j://localhost");
+$driverConfig = driverConfig($ffi, "bolt://localhost");
 $driverHandle = neo4jHandle($ffi);
 $driverHandle->cdata = 0;
 $error = ampersand(neo4jError($ffi));
@@ -51,8 +51,9 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
     $parameters[0] = neo4jQueryParam($ffi, "param1", 42);
     $parameterCount = $ffi->new("int");
     $parameterCount->cdata = count($parameters);
+    
     $result = $ffi->neo4j_tx_stream(
-        $transactionHandle,
+        $transactionHandle->cdata,
         cString($ffi, 'RETURN $param1 AS x'),
         $parameterCount,
         $parameters,
@@ -66,7 +67,7 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
     }
 
     $value = neo4jValue($ffi);
-    while ($ffi->neo4j_stream_next($streamHandle, ampersand($error))) {
+    while ($ffi->neo4j_stream_next($streamHandle->cdata, ampersand($error))) {
         $index = $ffi->new("int");
         $index->cdata = 0;
         $result = $ffi->neo4j_stream_value(
