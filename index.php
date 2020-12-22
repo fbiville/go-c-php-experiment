@@ -41,21 +41,22 @@ function main() {
 }
 
 class QueryParam {
-    private $name;
-    private $value;
+    private string $name;
+    // TODO: evolve C lib to support more data types
+    private int $value;
 
-    public function __construct($name, $value)
+    public function __construct(string $name, int $value)
     {
         $this->name = $name;
         $this->value = $value;
     }
 
-    public function getName()
+    public function getName(): string
     {
         return $this->name;
     }
 
-    public function getValue()
+    public function getValue(): int
     {
         return $this->value;
     }
@@ -132,6 +133,7 @@ function neo4jQueryParam(FFI $ffi, string $name, int $value): CData
 {
     $param = $ffi->new("neo4j_param");
     $param->name = cString($ffi, $name);
+    // TODO: evolve C lib to support more data types
     $param->typ = $ffi->NEO4J_INT64;
     $param->val = $value;
     return $param;
