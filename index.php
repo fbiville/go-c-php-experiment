@@ -71,7 +71,7 @@ function runTransaction(FFI $ffi, CData $driverHandle): bool
         $index = $ffi->new("int");
         $index->cdata = 0;
         $result = $ffi->neo4j_stream_value(
-            $streamHandle,
+            $streamHandle->cdata,
             $index,
             ampersand($value),
             ampersand($error)
